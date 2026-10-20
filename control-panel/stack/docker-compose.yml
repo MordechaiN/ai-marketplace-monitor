@@ -1,0 +1,122 @@
+# Marketplace Monitor stack: deployed ONLY through Portainer. Required stack variables: stack/stack.env.example (names only).
+name: marketplace-monitor
+
+services:
+  marketplace-scraper:
+    # Pinned to the image whose files were inspected and tested against (AIMM 0.10.2). Update deliberately via Portainer.
+    image: ${AIMM_IMAGE:-ghcr.io/bopeng/ai-marketplace-monitor@sha256:f30bd71c4359c559925d4842ddeace48bffd5dbbd3b98fccab316be5d7ae7daf}
+    container_name: marketplace-scraper
+    restart: unless-stopped
+    deploy:
+      replicas: ${SCRAPER_REPLICAS:-1}   # the CONTAINER runs idle (virtual display + control agent). The scraper PROCESS is off until you press start in the panel
+    environment:
+      TZ: ${TZ:-Asia/Jerusalem}
+      AGENT_TOKEN: ${AGENT_TOKEN}        # lets the panel's forwarder call the control agent; nothing else
+      # Facebook credentials are deliberately NOT passed: you log in by hand in the panel's browser window.
+    volumes:
+      - ${DATA_ROOT}/aimm:/root/.ai-marketplace-monitor           # config.toml (written by the panel), cache.db, log
+      - ${DATA_ROOT}/fb-session:/session                          # Facebook session file: this container only (mode 700)
+      - ${SRC_ROOT}/scraper-extras:/extras:ro                     # agent, login helper, session-persistence patch
+      - ${SRC_ROOT}/scraper-extras/aimm.conf:/etc/supervisor/conf.d/aimm.conf:ro   # autostart=false, UI on 127.0.0.1, VNC on localhost
+    networks: [mm_backend, default]    # default = outbound internet for Facebook. NO published ports: nothing here is reachable from the LAN
+    shm_size: 1gb                      # Chromium
+    mem_limit: 2g
+    cpus: 1.5
+    pids_limit: 512
+    security_opt: ["no-new-privileges:true"]
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"    # Watchtower runs hourly on this host; updates here are deliberate, via Portainer
+    depends_on: {gemini-guard: {condition: service_healthy}}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket;socket.create_connection(('127.0.0.1',8470),3)\" || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+
+  gemini-guard:
+    image: python:3.12-slim
+    container_name: gemini-guard
+    restart: unless-stopped
+    command: ["python", "-u", "/app/guard.py"]
+    environment:
+      TZ: ${TZ:-Asia/Jerusalem}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}              # the only place the Gemini key lives; AIMM only knows GUARD_TOKEN
+      GUARD_TOKEN: ${GUARD_TOKEN}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}   # pinned, no fallback model; change here to switch
+      GEMINI_RPM: ${GEMINI_RPM:-8}
+      GEMINI_RPD: ${GEMINI_RPD:-400}
+      GUARD_STATE: /data/guard-state.json
+    volumes:
+      - ${SRC_ROOT}/gemini-guard:/app:ro
+      - ${DATA_ROOT}/guard-data:/data
+    networks: [mm_backend, default]    # default = outbound to generativelanguage.googleapis.com only (nothing publishes a port)
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8090/healthz',timeout=5)\" || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging: {driver: json-file, options: {max-size: "5m", max-file: "3"}}
+
+  ntfy-to-telegram:
+    image: python:3.12-slim
+    container_name: ntfy-to-telegram
+    restart: unless-stopped
+    command: ["python", "-u", "/app/forwarder.py"]
+    environment:
+      TZ: ${TZ:-Asia/Jerusalem}
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN}
+      TG_CHAT_ID: ${TG_CHAT_ID}
+      NOTIFY_ENABLED: ${NOTIFY_ENABLED:-false}          # INITIAL value only (first start). Afterwards notifications are switched in the panel
+      UI_USER: ${UI_USER}
+      UI_PASS: ${UI_PASS}
+      AI_HEALTH_URL: http://gemini-guard:8090/healthz
+      AGENT_URL: http://marketplace-scraper:8470        # control agent in the scraper container (start/stop, validate config, login helper)
+      AGENT_TOKEN: ${AGENT_TOKEN}
+      GUARD_TOKEN: ${GUARD_TOKEN}                        # written into the generated config.toml for AIMM -> guard calls
+      SCRAPER_HOST: marketplace-scraper                  # noVNC bridge target (only reachable while the login helper is open)
+      MP_LOG: /aimm/ai-marketplace-monitor.log
+      MP_CONFIG: /aimm/config.toml
+      MP_CACHE: /aimm/cache.db
+      MP_BLACKLIST: /data/blacklist.jsonl
+      RECAP_HOUR: ${RECAP_HOUR:-21}                      # initial value only: the recap time is edited in the panel
+      RETENTION_DAYS: ${RETENTION_DAYS:-60}
+    volumes:
+      - ${SRC_ROOT}/forwarder:/app:ro
+      - ${DATA_ROOT}/forwarder-data:/data
+      - ${DATA_ROOT}/aimm:/aimm              # rw on purpose: feedback.py edits config.toml, prune.py edits cache.db
+    ports:
+      - "${LAN_IP}:8480:8081"                # authenticated /listings UI, LAN address only (never 0.0.0.0)
+    networks: [mm_backend, default]          # mm_backend: ingest from the scraper + guard health; default: api.telegram.org
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/healthz',timeout=5)\" || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+
+networks:
+  mm_backend:
+    internal: true            # scraper <-> guard <-> forwarder only; no outside access, nothing from other stacks
+  default: {}

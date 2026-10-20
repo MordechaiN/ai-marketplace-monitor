@@ -1,0 +1,29 @@
+# Copy to ${DATA_ROOT}/aimm/config.toml, chmod 600, fill the TODOs. Contains the AI API key: never commit the filled file.
+[marketplace.facebook]
+search_city = 'TODO-facebook-city-id'
+radius = 30
+currency = 'ILS'
+search_interval = '1h'          # conservative: the original example uses 30m. Do not go lower on this account.
+max_search_interval = '90m'     # randomised window (only if your AIMM version supports it; otherwise delete)
+rating = 4
+ai = ['guard']
+notify = ['marketplace']
+
+[ai.guard]                      # AIMM -> gemini-guard (OpenAI-compatible) -> Gemini. The guard pins the model; change it in the stack variable GEMINI_MODEL.
+provider = 'openai'
+base_url = 'http://gemini-guard:8090/v1'
+api_key = 'TODO-same-value-as-GUARD_TOKEN'   # NOT the Gemini key
+model = 'ignored-guard-pins-the-model'
+max_retries = 2                 # AIMM default is 10 retries x 5 s; the guard already retries and rate-limits
+timeout = 240                   # the guard may hold a request up to ~3 min while it paces or retries
+
+[user.marketplace]
+ntfy_server = 'http://ntfy-to-telegram:8080'
+ntfy_topic = 'marketplace'
+
+[item.gpu]
+search_phrases = ['gpu', 'graphics card']
+min_price = 100
+max_price = 800
+antikeywords = ['broken', 'for parts']
+description = '''A working desktop GPU, GTX 1080 or newer. Not suitable: GTX 1060 and older, workstation cards, whole PCs or bundles, broken or for-parts cards.'''

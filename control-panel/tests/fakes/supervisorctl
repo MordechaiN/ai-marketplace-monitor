@@ -1,0 +1,10 @@
+#!/bin/bash
+# fake supervisorctl: state kept in $FAKE_SUP_DIR/<name>. Models supervisor's STARTING phase (FAKE_START_DELAY) and a FATAL crash.
+D=${FAKE_SUP_DIR:?}
+case "$1" in
+  status) for n in xvfb x11vnc agent aimm novnc; do
+      s=STOPPED; [ -f $D/$n ] && s=RUNNING; [ -f $D/$n.starting ] && s=STARTING; [ $n = xvfb ] && s=RUNNING; [ -f $D/$n.fatal ] && s=FATAL
+      printf "%-20s %-10s %s\n" $n $s "pid 1, uptime 0:00:05"; done ;;
+  start) touch $D/$2.starting; sleep $(cat $D/start_delay 2>/dev/null || echo 0); rm -f $D/$2.starting; touch $D/$2; echo "$2: started" ;;
+  stop) rm -f $D/$2 $D/$2.starting; echo "$2: stopped" ;;
+esac
