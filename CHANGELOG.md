@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Fork: control panel (`control-panel/`), 2026-10-20
+
+Changes of this fork's `control-panel/` stack. The upstream package (`src/`) is unchanged at 0.10.2.
+
+### Added
+- Visual refresh of the listings and scan views, using semantic colours that always come with a text label:
+  - 🆕 **New listing**: a solid teal badge plus a teal outline and top accent on the card. It appears only for listings first found after your last visit. Price changes and re-evaluations never mark an old listing as new.
+  - 📉 **Price drop** (green) and 📈 **Price went up** (amber): explicit labels, with the previous price struck through next to the current one. A listing that is both new and discounted shows both badges, once each.
+  - **Match chips:** excellent and good matches are green, a fair (uncertain) match is amber, weak matches are neutral gray, and *Not rated* is amber with ⚠️.
+  - **Sold and unavailable:** a neutral gray chip and a dimmed card. Red is reserved for real errors, and blue for primary actions.
+- Listing cards have a fixed hierarchy: status badges, a title clamped to two lines, the price row, 📍 place and the search name, the AI explanation, then actions.
+- English AI explanations stored before explanations followed the panel language are shown in Hebrew mode with a short "original explanation in English" note.
+- Listing availability lifecycle (available, sold, unavailable, unverified) with bounded re-checks.
+- Scan timing: start, end, duration and a per-stage breakdown (listing pages, AI, quota wait, forwarding and storage, other), plus the scraper's last step while a scan runs.
+- Telegram alerts and daily recaps in the panel language.
+
+### Fixed
+- The AI relevance rules are evidence-based: generic titles and multi-item posts no longer count as matches, and preferences are never assumed.
+- The guard accepts only a well-formed final `Rating N:` verdict.
+- AIMM's pluralised item names in notification titles ("p2s") are mapped to the real search.
+- Scan counters are restored from the wrapped console log: rating spread, rejection examples and unique listings.
+- On phones (360 px) the bottom-navigation labels no longer run into each other. Long labels are shortened with "…", and the full name stays available as a tooltip and to screen readers.
+
+### Changed
+- AIMM's "See more" wait on listing pages was reduced from 8 s to 1.5 s (measured: the button never appeared on production scans).
+
 ## [0.10.2] - 2026-07-17
 
 ### Added

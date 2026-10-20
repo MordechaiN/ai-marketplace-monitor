@@ -49,4 +49,23 @@ try:
     check("generated item block is valid TOML", tomllib.loads(blk)["item"]["p2"]["extra_prompt"].startswith("[relevance rules v"))
 except ImportError:
     pass
+# the supervisor (console) log wraps messages at a fixed width: continuation lines are indented 29 spaces, URLs are split mid-token
+W = " " * 29
+sup = "\n".join([
+    "[10/20/26 17:48:50] INFO     [Search] Searching facebook for p2 from Haifa with radius=10",
+    "                    INFO     [Retrieve] Navigating to                           ",
+    W + "https://www.facebook.com/marketplace/item/111386898",
+    W + "7742751/?ref=search&referral_code=null              ",
+    "                    INFO     [AI] guard concludes Poor match (3): המכשיר מתאים  ",
+    W + "אך חסרים בקבוקים. for listing סודה סטרים.          ",
+    "                    INFO     [Skip] Rating Poor match (3) for סודה סטרים is     ",
+    W + "below threshold 4.",
+    "                    INFO     [AI] guard concludes No match (1): שפצורים לנשק.   ",
+    W + "for listing שפצורים.",
+    "                    INFO     [Search] 0 new listings for p2 are found.",
+    "                    INFO     Next job to search p2 scheduled"])
+j = panel.parse_run(sup)
+check("console log: split URL ids and wrapped verdicts are restored", j["ratings"] == {"3": 1, "1": 1} and j["examples"][0]["title"] == "סודה סטרים" and "חסרים בקבוקים" in j["examples"][0]["reason"])
+check("console log: every evaluated listing counts as reviewed even when its URL is not printed", j["items_opened"] == 2 and j["ai_rated"] == 2 and j["done"])
+check("file log lines (no 29-space continuation) are untouched", panel.unwrap("a\n    post_url='x',\nb", " ") == "a\n    post_url='x',\nb")
 print(f"\n{ok} passed, {fail} failed"); sys.exit(1 if fail else 0)

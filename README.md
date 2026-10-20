@@ -15,6 +15,7 @@ three small services around it: a control panel with a Telegram forwarder, a gua
 ## Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Languages](#languages)
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
@@ -48,7 +49,13 @@ three small services around it: a control panel with a Telegram forwarder, a gua
 
 **Results**
 - An all-listings view and a view per saved search. A listing that matches several searches appears in each.
-- New-listing and price-drop indicators, saved listings, filters (price, place, price drops), bulk actions and history clean-up.
+- Clear visual status on every card, always with a text label, never colour alone:
+  - 🆕 **New listing**: a teal badge and card accent. It appears only for listings first found since your last visit.
+  - 📉 **Price drop** (green) and 📈 **Price went up** (amber), with the previous price struck through.
+  - **Match level:** excellent and good are green, fair (uncertain) is amber, weak is gray, and *Not rated* is amber with ⚠️.
+  - **Sold and unavailable:** a gray chip and a dimmed card. Red is reserved for errors, and blue for primary actions.
+- Light and dark themes (following the system setting), checked for WCAG AA contrast and in right-to-left and left-to-right layouts down to 360 px wide.
+- Saved listings, filters (price, place, price drops, sold and unavailable), bulk actions and history clean-up.
 - Availability lifecycle: listings that were sold or removed are detected with bounded re-checks and hidden by default (see [Listing availability](#listing-availability)).
 
 **Notifications (Telegram)**
@@ -61,6 +68,14 @@ three small services around it: a control panel with a Telegram forwarder, a gua
 - A live progress view while a scan runs: stage, counters, last step, and stuck detection.
 - Facebook login through a browser window inside the container, viewed through the panel (noVNC). Your password is never stored, only the session.
 - Docker resource limits, internal-only networks, no published ports except the panel on your LAN address.
+
+## Screenshots
+
+Taken by the automated browser test, with test data only. Emoji glyphs depend on the fonts installed in the browser.
+
+| Hebrew, dark | English, light | Mobile (360 px) |
+|---|---|---|
+| ![Listings in Hebrew, dark theme](control-panel/docs/screenshots/listings-hebrew-dark.png) | ![Listings in English, light theme](control-panel/docs/screenshots/listings-english-light.png) | ![Listings on a narrow screen](control-panel/docs/screenshots/listings-mobile.png) |
 
 ## Languages
 
@@ -247,7 +262,9 @@ bash tests/run_all.sh
 ```
 
 Browser and real-AIMM tests (`test_ui_browser`, `test_session_patch`, `test_logflood`) run when `AIMM_LIB` points to a folder with
-`ai_marketplace_monitor==0.10.2` and Playwright installed. The upstream package keeps its own tests under `tests/`.
+`ai_marketplace_monitor==0.10.2` and a Playwright version whose Chromium build is installed. Chromium may need extra system libraries
+(`LD_LIBRARY_PATH`). The browser test covers the listing badges (new, price drop, both together), match colours, contrast in light and dark,
+Hebrew right-to-left and a 360 px mobile layout, and writes screenshots to `$SHOTS`. The upstream package keeps its own tests under `tests/`.
 
 ## Security and privacy
 

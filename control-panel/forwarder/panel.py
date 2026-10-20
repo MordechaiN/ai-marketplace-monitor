@@ -303,21 +303,45 @@ def scan_info(sc):
     txt, meta = run_log(sc)
     info = parse_run(txt, meta["rotated"])
     info.update(source=meta["source"], partial=meta["rotated"], mtime=meta["mtime"])
+    if meta["source"] == "supervisor":  # the console log prints URLs only for freshly opened pages; AIMM's DEBUG file log has every listing
+        try:
+            ftxt, frot = log_since(sc.get("scan_file_offset", 0))
+            if not frot:
+                info["items_opened"] = max(info["items_opened"], len(set(ITEM_ID.findall(ftxt))))
+        except Exception:
+            pass
     rt["info_cache"] = (key, time.time(), info)
     return info
 
 
+CONT = re.compile(r"^ {29}\S")
+
+
+def unwrap(txt, glue):
+    """The supervisor log is rich console output: messages are wrapped at a fixed width and continued on lines indented 29 spaces, and long
+    tokens (URLs) are split mid-word. glue=" " restores sentences (verdicts), glue="" restores split URLs (item ids)."""
+    out = []
+    for ln in txt.split("\n"):
+        if out and CONT.match(ln):
+            out[-1] = out[-1].rstrip() + glue + ln.strip()
+        else:
+            out.append(ln)
+    return "\n".join(out)
+
+
 def parse_run(txt, rotated=False):
     """The counters of one run (manual scan or one monitoring cycle), counted from AIMM's own log lines. Nothing is estimated."""
+    flat, glued = unwrap(txt, " "), unwrap(txt, "")
     last_search = txt.rfind("Searching facebook for")
     # unique listings = distinct Facebook item ids. "[Retrieve] Parsing" only counts detail pages fetched fresh (cached ones skip it), so it
     # undercounted: the 3 Oct scan logged 19 parses but 68 listings and 66 AI evaluations (44 of them answered from AIMM's AI cache).
-    unique = max(len(set(ITEM_ID.findall(txt))), txt.count("[Retrieve] Parsing"))
-    evals = [m.groups() for m in AI_VERDICT.finditer(txt)]
+    unique = max(len(set(ITEM_ID.findall(glued))), txt.count("[Retrieve] Parsing"))
+    evals = [m.groups() for m in AI_VERDICT.finditer(flat)]
+    unique = max(unique, len({t.strip() for _v, _n, _r, t in evals}))  # every evaluated listing was reviewed (console logs omit cached URLs)
     ratings = {}
     for _v, n, _r, _t in evals:
         ratings[n] = ratings.get(n, 0) + 1
-    thr = [int(x) for x in re.findall(r"is below threshold (\d)", txt)]
+    thr = [int(x) for x in re.findall(r"is below threshold (\d)", flat)]
     rejected = sorted(((int(n), v, r, t) for v, n, r, t in evals if thr and int(n) < max(thr)), key=lambda e: -e[0])
     examples, seen = [], set()
     for n, _v, r, t in rejected:  # the closest misses first: they say the most about why nothing passed

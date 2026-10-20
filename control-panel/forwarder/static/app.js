@@ -108,7 +108,7 @@ const NAV = [["home", L("בית", "Home"), "home"], ["searches", L("חיפושי
 function drawShell(cur, attention) {
   const brand = $("#brand"); if (!brand.firstChild) brand.append(icon("cart"), h("span", {}, L("ניטור מרקטפלייס", "Marketplace Monitor")));
   const n = $("#tabs"); n.replaceChildren();
-  for (const [id, label, ic] of NAV) n.append(h("a", { href: "#/" + id, "aria-current": id === cur ? "page" : null }, icon(ic), h("span", {}, label), id === "facebook" && attention ? h("i", { class: "dot", title: L("דורש טיפול", "Needs attention") }) : null));
+  for (const [id, label, ic] of NAV) n.append(h("a", { href: "#/" + id, "aria-current": id === cur ? "page" : null, title: label }, icon(ic), h("span", {}, label), id === "facebook" && attention ? h("i", { class: "dot", title: L("דורש טיפול", "Needs attention") }) : null));
 }
 let ATTENTION = false;
 async function refreshAttention() {
@@ -276,8 +276,8 @@ function priceChange(x) {
   // only when the stored history shows a real change (server checks it); never for a missing price
   if (!x.price_dir || x.prev_price == null || x.price == null) return null;
   const down = x.price_dir === "down";
-  return h("span", { class: "pc" }, h("span", { class: "chip " + (down ? "good" : "warn") }, down ? L("המחיר ירד", "Price dropped") : L("המחיר עלה", "Price went up")),
-    h("span", { class: "was" }, L("מחיר קודם: ", "Previous price: ") + fmtMoney(x.prev_price, x.currency)));
+  return [h("span", { class: "was", "aria-label": L("מחיר קודם ", "Previous price ") + fmtMoney(x.prev_price, x.currency) }, fmtMoney(x.prev_price, x.currency)),
+    h("span", { class: "chip " + (down ? "down" : "up") }, down ? L("📉 ירידת מחיר", "📉 Price drop") : L("📈 המחיר עלה", "📈 Price went up"))];
 }
 
 function deleteDialog(urls, after) {
@@ -310,25 +310,29 @@ function cleanupDialog(after) {
 
 // Availability from the bounded re-checks: "sold" only when Facebook itself says so; "unavailable" after repeated looks; never from one failed look.
 function availChip(x) {
-  if (x.availability === "sold") return h("span", { class: "chip bad", title: L("פייסבוק מסמנת את המודעה כנמכרה", "Facebook marks this listing as sold") }, L("נמכר", "Sold"));
-  if (x.availability === "unavailable") return h("span", { class: "chip bad", title: L("המודעה לא מוצגת יותר בפייסבוק (נבדק כמה פעמים). ייתכן שנמחקה, פגה או נמכרה.", "Facebook no longer shows this listing (checked several times). It may have been removed, expired or sold.") }, L("לא זמינה", "Unavailable"));
-  if (x.availability === "active" && x.avail_checked) return h("span", { class: "chip", title: L("נבדק ", "Checked ") + fmtTime(x.avail_checked) }, L("זמינה", "Available"));
+  if (x.availability === "sold") return h("span", { class: "chip gone", title: L("פייסבוק מסמנת את המודעה כנמכרה", "Facebook marks this listing as sold") }, L("נמכר", "Sold"));
+  if (x.availability === "unavailable") return h("span", { class: "chip gone", title: L("המודעה לא מוצגת יותר בפייסבוק (נבדק כמה פעמים). ייתכן שנמחקה, פגה או נמכרה.", "Facebook no longer shows this listing (checked several times). It may have been removed, expired or sold.") }, L("לא זמינה", "Unavailable"));
+  if (x.availability === "active" && x.avail_checked) return h("span", { class: "chip low", title: L("נבדק ", "Checked ") + fmtTime(x.avail_checked) }, L("זמינה", "Available"));
   return null;
 }
 const gone = x => x.availability === "sold" || x.availability === "unavailable";
 
 function listingCard(x, o = {}) {
-  const reason = x.reason || "";
+  // Hebrew mode with an explanation written before explanations followed the panel language: show it, labelled, rather than hide it
+  const reason = x.reason || "", heb = /[\u0590-\u05FF]/.test(reason), oldLang = LANG === "he" && reason && !heb;
   const long = reason.length > 140;
-  const reasonBox = x.unrated ? h("div", { class: "reason" }, L("הדירוג החכם לא הצליח לדרג את המודעה (תקלה זמנית), לכן זה לא דירוג נמוך. כדאי להסתכל בעצמכם.", "The AI rating could not rate this listing (a temporary problem), so this is not a low rating. Take a look yourself.")) : (reason ? h("div", { class: "reason" }, h("span", {}, long ? reason.slice(0, 140) + "… " : reason), long ? h("button", { onclick: e => { const s = e.currentTarget.previousSibling; s.textContent = reason + " "; e.currentTarget.remove(); } }, L("קרא עוד", "Read more")) : null) : null);
+  const reasonBox = x.unrated ? h("div", { class: "reason" }, "⚠️ " + L("הדירוג החכם לא הצליח לדרג את המודעה (תקלה זמנית), לכן זה לא דירוג נמוך. כדאי להסתכל בעצמכם.", "The AI rating could not rate this listing (a temporary problem), so this is not a low rating. Take a look yourself."))
+    : (reason ? h("div", { class: "reason", dir: "auto" }, oldLang ? h("span", { class: "src" }, "הסבר מקורי באנגלית") : null,
+      h("span", {}, long ? reason.slice(0, 140) + "… " : reason), long ? h("button", { onclick: e => { const s = e.currentTarget.previousSibling; s.textContent = reason + " "; e.currentTarget.remove(); } }, L("קרא עוד", "Read more")) : null) : null);
   const picked = LF.picked.has(x.url);
-  const card = h("article", { class: "card lcard" + (picked ? " picked" : "") },
-    h("div", { class: "row" },
+  const card = h("article", { class: "card lcard" + (picked ? " picked" : "") + (x.new ? " is-new" : "") + (gone(x) ? " is-gone" : ""), "data-new": x.new ? "1" : null },
+    h("div", { class: "row badges" },
       LF.bulk && !o.compact ? h("input", { type: "checkbox", checked: picked, "aria-label": L("בחירת מודעה", "Select listing"), onchange: e => { e.target.checked ? LF.picked.add(x.url) : LF.picked.delete(x.url); o.onChange && o.onChange(true); } }) : null,
-      x.new ? h("span", { class: "chip new" }, L("מודעה חדשה", "New listing")) : null, availChip(x), h("span", { class: "chip " + x.tone }, x.score ? `${x.score}/5 · ${x.verdict}` : x.verdict), h("span", { class: "grow" }), h("span", { class: "small muted" }, ago(x.found_at))),
-    h("a", { class: "title", href: x.url, target: "_blank", rel: "noopener noreferrer", dir: "auto" }, x.title),
-    h("div", {}, h("span", { class: "price" }, fmtMoney(x.price, x.currency)), priceChange(x)),
-    h("div", { class: "small muted" }, [x.product, x.loc].filter(Boolean).join(" · ")),
+      x.new ? h("span", { class: "chip new" }, L("🆕 מודעה חדשה", "🆕 New listing")) : null, availChip(x),
+      h("span", { class: "chip " + x.tone }, x.score ? `${x.score}/5 · ${x.verdict}` : "⚠️ " + x.verdict), h("span", { class: "small muted when" }, ago(x.found_at))),
+    h("a", { class: "title", href: x.url, target: "_blank", rel: "noopener noreferrer", dir: "auto", title: x.title }, x.title),
+    h("div", { class: "pricerow" }, h("span", { class: "price" }, fmtMoney(x.price, x.currency)), priceChange(x)),
+    h("div", { class: "meta" }, x.loc ? h("span", { dir: "auto" }, "📍 " + x.loc) : null, x.product ? h("span", {}, L("חיפוש: ", "Search: ") + x.product) : null),
     reasonBox,
     h("div", { class: "acts" },
       h("a", { class: "btn sm primary", href: x.url, target: "_blank", rel: "noopener noreferrer" }, icon("ext"), L("פתיחה בפייסבוק", "Open on Facebook")),
